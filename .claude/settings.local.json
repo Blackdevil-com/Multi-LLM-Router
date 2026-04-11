@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ai-router-env/Scripts/uvicorn main:app --reload --host 0.0.0.0 --port 8000)",
+      "Bash(curl:*)",
+      "Bash(ai-router-env/Scripts/python -c ':*)",
+      "Bash(ai-router-env/Scripts/pip install:*)",
+      "Bash(python -m py_compile router.py registry.py providers/*.py)",
+      "Bash(python:*)"
+    ]
+  }
+}
