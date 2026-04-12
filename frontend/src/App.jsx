@@ -1,20 +1,20 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 import './App.css'
 
 const API_BASE = '/api'
 
 const TASK_CATEGORIES = {
-  'Code & Debugging': ['code', 'debug', 'sql'],
-  'Explanation & Writing': ['explain', 'summarize'],
-  'Math & Reasoning': ['math', 'calculate'],
-  'Image Generation': ['generate image', 'draw'],
-'Audio & Transcription': ['transcribe', 'speech', 'text_to_speech'],
-  'Vision & Analysis': ['segment', 'describe']
+  'Code': ['code', 'debug', 'sql'],
+  'Writing': ['explain', 'summarize'],
+  'Math': ['math', 'calculate'],
+  'Image': ['generate image', 'draw'],
+  'Audio': ['transcribe', 'speech', 'text_to_speech'],
+  'Vision': ['segment', 'describe']
 }
 
 const PROVIDER_INFO = {
-cf_tts: { name: 'Cloudflare TTS', model: 'deepgram/aura-2-en', color: '#ec4899' },
+  cf_tts: { name: 'Cloudflare TTS', model: 'deepgram/aura-2-en', color: '#ec4899' },
   groq_coder: { name: 'Groq Coder', model: 'Qwen3-32B', color: '#10b981' },
   groq_explainer: { name: 'Groq Explainer', model: 'Llama-3.3-70B', color: '#3b82f6' },
   groq_math: { name: 'Groq Math', model: 'GPT-oss-120B', color: '#f59e0b' },
@@ -25,83 +25,131 @@ cf_tts: { name: 'Cloudflare TTS', model: 'deepgram/aura-2-en', color: '#ec4899' 
 }
 
 function App() {
-  const [availableTasks, setAvailableTasks] = useState([])
-  const [providers, setProviders] = useState({})
   const [routingRules, setRoutingRules] = useState({})
-  const [selectedTask, setSelectedTask] = useState('')
+  const [backendStatus, setBackendStatus] = useState('disconnected')
+  const fallbackRules = {
+    "code": "groq_coder",
+    "explain": "groq_explainer",
+    "math": "groq_math",
+    "generate image": "cf_image",
+    "transcribe": "cf_whisper",
+    "text_to_speech": "cf_tts",
+    "segment": "hf_sam2",
+    "describe": "hf_phi4"
+  }
+  const [messages, setMessages] = useState([])
+  const [currentTask, setCurrentTask] = useState('')
   const [prompt, setPrompt] = useState('')
-  const [response, setResponse] = useState(null)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
-  const [imageResponse, setImageResponse] = useState(null)
-  const [audioResponse, setAudioResponse] = useState(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [apiKeys, setApiKeys] = useState({
+    GROQ_API_KEY: '',
+    CF_ACCOUNT_ID: '',
+    CF_API_TOKEN: '',
+    HF_TOKEN: ''
+  })
+  const messagesEndRef = useRef(null)
+  const inputRef = useRef(null)
 
   useEffect(() => {
-    fetchInitialData()
+    fetchProviders()
+    loadApiKeys()
   }, [])
 
-  const fetchInitialData = async () => {
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages])
+
+  const fetchProviders = async () => {
     try {
-      const [rootRes, providersRes] = await Promise.all([
-        axios.get(`${API_BASE}/`),
-        axios.get(`${API_BASE}/providers`)
-      ])
-      setAvailableTasks(rootRes.data.available_tasks || [])
-      setProviders(providersRes.data.providers || [])
-      setRoutingRules(providersRes.data.routing_rules || {})
+      const res = await axios.get(`${API_BASE}/providers`)
+      setRoutingRules(res.data.routing_rules || {})
+      setBackendStatus('connected')
     } catch (err) {
-      setError('Failed to connect to backend. Make sure the server is running on port 8000.')
+      console.error('Failed to fetch providers:', err)
+      setBackendStatus('disconnected')
+      // Use fallback
+      setRoutingRules(fallbackRules)
     }
   }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    if (!selectedTask || !prompt.trim()) return
+  const loadApiKeys = () => {
+    const saved = localStorage.getItem('ai-router-keys')
+    if (saved) {
+      setApiKeys(JSON.parse(saved))
+    }
+  }
 
+  const saveApiKeys = (keys) => {
+    localStorage.setItem('ai-router-keys', JSON.parse(keys))
+    setApiKeys(keys)
+    alert('Keys saved to localStorage. Copy to backend .env!')
+  }
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  const handleSend = async () => {
+    if (!prompt.trim() || !currentTask) return
+
+    const userMessage = { role: 'user', content: prompt, task_type: currentTask, timestamp: new Date() }
+    setMessages(prev => [...prev, userMessage])
     setLoading(true)
-    setError(null)
-    setResponse(null)
-      setImageResponse(null)
-      setAudioResponse(null)
+    const currentPrompt = prompt
 
     try {
+      let responseType = (currentTask === 'text_to_speech' || currentTask.includes('image') || currentTask === 'draw') ? 'blob' : 'json'
       const res = await axios.post(`${API_BASE}/generate`, {
-        task_type: selectedTask,
-        prompt: prompt
-      }, {
-responseType: (selectedTask.includes('image') || selectedTask === 'draw' || selectedTask === 'text_to_speech') ? 'blob' : 'json'
-      })
+        task_type: currentTask,
+        prompt: buildPromptWithHistory(currentPrompt)
+      }, { responseType })
 
-if (selectedTask.includes('image') || selectedTask === 'draw' || selectedTask === 'text_to_speech') {
-      const mediaUrl = URL.createObjectURL(res.data)
-if (selectedTask === 'text_to_speech') {
-        setAudioResponse(mediaUrl)
+      let aiContent
+      if (responseType === 'blob') {
+        const url = URL.createObjectURL(res.data)
+        aiContent = { type: currentTask === 'text_to_speech' ? 'audio' : 'image', url, provider: routingRules[currentTask] }
       } else {
-        setImageResponse(mediaUrl)
+        aiContent = { type: 'text', text: res.data.response, provider: res.data.provider }
       }
-      } else {
-        setResponse({
-          provider: res.data.provider,
-          content: res.data.response
-        })
-      }
+
+      const aiMessage = { role: 'ai', content: aiContent, timestamp: new Date() }
+      setMessages(prev => [...prev, aiMessage])
     } catch (err) {
-      setError(err.response?.data?.detail || err.message || 'Failed to generate response')
+      const errorMessage = { role: 'ai', content: { type: 'error', text: err.response?.data?.detail || err.message }, timestamp: new Date() }
+      setMessages(prev => [...prev, errorMessage])
     } finally {
       setLoading(false)
+      setPrompt('')
+      setCurrentTask('')
+      inputRef.current?.focus()
     }
   }
 
-  const getProviderForTask = (task) => {
-    return routingRules[task] || null
+  const buildPromptWithHistory = (input) => {
+    if (messages.length === 0) return input
+    const history = messages.slice(-4).map(m => `${m.role.toUpperCase()}: ${typeof m.content === 'string' ? m.content : '[media]'}`).join('\n')
+    return `Previous conversation:\n${history}\n\nNew query: ${input}`
   }
 
-  const getProviderInfo = (providerKey) => {
-    return PROVIDER_INFO[providerKey] || { name: providerKey, model: 'Unknown', color: '#6b7280' }
+  const allTasks = Object.keys(routingRules)
+
+  const getProviderInfo = (providerKey) => PROVIDER_INFO[providerKey] || { name: providerKey, model: 'Unknown', color: '#6b7280' }
+
+  const clearChat = () => setMessages([])
+
+  const exportChat = () => {
+    const chatText = messages.map(m => `${m.role.toUpperCase()}: ${typeof m.content === 'object' ? '[media]' : m.content.text || m.content}`).join('\n\n')
+    const blob = new Blob([chatText], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'chat-history.txt'
+    a.click()
   }
 
   return (
-    <div className="app">
+    <div className="chat-app">
       <header className="header">
         <div className="logo">
           <svg className="logo-icon" viewBox="0 0 48 48" fill="none">
@@ -109,177 +157,151 @@ if (selectedTask === 'text_to_speech') {
             <circle cx="24" cy="24" r="8" stroke="var(--accent)" strokeWidth="2" fill="none"/>
             <circle cx="24" cy="24" r="3" fill="var(--accent)"/>
           </svg>
-          <h1>AI Multi LLM Router</h1>
+          <h1>AI Router Chat</h1>
         </div>
-        <p className="subtitle">Intelligent routing to free LLM providers based on task type</p>
+        <p className="subtitle">Real-time chat with intelligent provider routing</p>
       </header>
 
-      <main className="main">
-        <section className="card providers-section">
-          <h2>Available Providers</h2>
-          <div className="providers-grid">
-            {Object.entries(routingRules).map(([task, providerKey]) => {
-              const info = getProviderInfo(providerKey)
-              return (
-                <div
-                  key={task}
-                  className="provider-card"
-                  style={{ borderColor: info.color }}
-                >
-                  <div className="provider-header">
-                    <span className="provider-dot" style={{ backgroundColor: info.color }}/>
-                    <span className="provider-name">{info.name}</span>
-                  </div>
-                  <p className="provider-model">{info.model}</p>
-                  <p className="provider-tasks">Tasks: <code>{task}</code></p>
+      <div className="main-container">
+        <aside className="sidebar">
+          <div className="sidebar-section">
+            <h3>Providers</h3>
+            <div className="providers-list">
+              {backendStatus === 'disconnected' && (
+                <div className="backend-status">
+                  <p>⚠️ Backend offline</p>
+                  <p>Run: <code>cd backend && python main.py</code></p>
                 </div>
-              )
-            })}
+              )}
+              {Object.entries(routingRules).map(([task, provider]) => {
+                const info = getProviderInfo(provider)
+                return (
+                  <div key={task} className="provider-item" onClick={() => setCurrentTask(task)}>
+                    <span className="provider-dot" style={{backgroundColor: info.color}} />
+                    <span>{info.name} <small>{task}</small></span>
+                  </div>
+                )
+              })}
+            </div>
           </div>
-        </section>
 
-        <section className="card form-section">
-          <h2>Send a Request</h2>
-          <form onSubmit={handleSubmit}>
-            <div className="form-group">
-              <label htmlFor="task-type">Task Type</label>
-              <select
-                id="task-type"
-                value={selectedTask}
-                onChange={(e) => setSelectedTask(e.target.value)}
-                required
-              >
-                <option value="">Select a task type...</option>
-                {Object.entries(TASK_CATEGORIES).map(([category, tasks]) => (
-                  <optgroup key={category} label={category}>
-                    {tasks.map(task => (
-                      <option key={task} value={task}>
-                        {task} {routingRules[task] && `→ ${getProviderInfo(routingRules[task]).name}`}
-                      </option>
-                    ))}
-                  </optgroup>
+          <div className="sidebar-section">
+            <div className="sidebar-toggle" onClick={() => setSettingsOpen(!settingsOpen)}>
+              <span>⚙️ Settings</span>
+            </div>
+            {settingsOpen && (
+              <div className="settings-panel">
+                <h4>API Keys (localStorage → backend .env)</h4>
+                {Object.entries(apiKeys).map(([key, value]) => (
+                  <div key={key} className="api-key-input">
+                    <label>{key}</label>
+                    <input 
+                      type="password" 
+                      value={value} 
+                      onChange={(e) => setApiKeys({...apiKeys, [key]: e.target.value})}
+                      placeholder={`Enter ${key}`}
+                    />
+                  </div>
                 ))}
-              </select>
-              {selectedTask && routingRules[selectedTask] && (
-                <p className="selected-provider">
-                  Will route to: <strong style={{ color: getProviderInfo(routingRules[selectedTask]).color }}>
-                    {getProviderInfo(routingRules[selectedTask]).name}
-                  </strong> ({getProviderInfo(routingRules[selectedTask]).model})
-                </p>
-              )}
-            </div>
+                <button className="save-keys-btn" onClick={() => saveApiKeys(apiKeys)}>
+                  Save Keys
+                </button>
+                <p className="note">Copy saved keys to backend .env file.</p>
+              </div>
+            )}
+          </div>
 
-            <div className="form-group">
-              <label htmlFor="prompt">Prompt</label>
-              <textarea
-                id="prompt"
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="Enter your prompt here..."
-                rows={6}
-                required
-              />
-            </div>
+          <div className="sidebar-actions">
+            <button className="clear-btn" onClick={clearChat}>Clear Chat</button>
+            <button className="export-btn" onClick={exportChat}>Export Chat</button>
+          </div>
+        </aside>
 
-            <button type="submit" className="submit-btn" disabled={loading || !selectedTask || !prompt.trim()}>
-              {loading ? (
-                <>
-                  <span className="spinner"/>
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <svg className="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
-                  </svg>
-                  Generate Response
-                </>
-              )}
+        <main className="chat-main">
+          <div className="chat-messages">
+            {messages.length === 0 ? (
+              <div className="welcome-message">
+                <h2>Welcome to AI Router Chat!</h2>
+                <p>Select a provider from sidebar, choose task type, and start chatting.</p>
+              </div>
+            ) : (
+              messages.map((message, index) => (
+                <div key={index} className={`message ${message.role}`}>
+                  <div className="message-bubble">
+                    {message.role === 'user' ? (
+                      <div className="user-content">{message.content}</div>
+                    ) : message.content.type === 'text' ? (
+                      <div className="ai-text">
+                        <div className="provider-tag" style={{backgroundColor: getProviderInfo(message.content.provider).color}}>
+                          {getProviderInfo(message.content.provider).name}
+                        </div>
+                        <p>{message.content.text}</p>
+                      </div>
+                    ) : message.content.type === 'image' ? (
+                      <div className="ai-media">
+                        <div className="provider-tag" style={{backgroundColor: getProviderInfo(routingRules[currentTask]).color}}>
+                          {getProviderInfo(routingRules[currentTask]).name}
+                        </div>
+                        <img src={message.content.url} alt="Generated" />
+                      </div>
+                    ) : message.content.type === 'audio' ? (
+                      <div className="ai-media">
+                        <div className="provider-tag" style={{backgroundColor: getProviderInfo(routingRules[currentTask]).color}}>
+                          {getProviderInfo(routingRules[currentTask]).name}
+                        </div>
+                        <audio controls src={message.content.url} />
+                      </div>
+                    ) : (
+                      <div className="error-content">{message.content.text}</div>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+            {loading && (
+              <div className="message ai">
+                <div className="message-bubble">
+                  <div className="typing-indicator">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          <div className="input-bar">
+            <select 
+              value={currentTask} 
+              onChange={(e) => setCurrentTask(e.target.value)}
+              className="task-select"
+            >
+              <option value="">Select Task</option>
+              {Object.keys(routingRules || fallbackRules).map(task => (
+                <option key={task} value={task}>{task} ({getProviderInfo(routingRules[task] || fallbackRules[task]).name})</option>
+              ))}
+            </select>
+            <input
+              ref={inputRef}
+              type="text"
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && !loading && handleSend()}
+              placeholder="Type your message... (Ctrl+Enter to send)"
+              className="prompt-input"
+              disabled={loading}
+            />
+            <button onClick={handleSend} disabled={loading || !prompt.trim() || !currentTask} className="send-btn">
+              {loading ? '...' : 'Send'}
             </button>
-          </form>
-        </section>
-
-        {error && (
-          <section className="card error-section">
-            <svg className="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10"/>
-              <path d="M12 8v4M12 16h.01"/>
-            </svg>
-            <p>{error}</p>
-          </section>
-        )}
-
-        {loading && (
-          <section className="card loading-section">
-            <div className="loading-animation">
-              <div className="pulse"/>
-              <p>Routing to provider and generating response...</p>
-            </div>
-          </section>
-        )}
-
-        {response && (
-          <section className="card response-section">
-            <h2>Response</h2>
-            <div className="response-meta">
-              <span className="provider-badge" style={{ backgroundColor: getProviderInfo(response.provider).color }}>
-                {getProviderInfo(response.provider).name}
-              </span>
-              <span className="model-info">{getProviderInfo(response.provider).model}</span>
-            </div>
-            <div className="response-content">
-              <p>{response.content}</p>
-            </div>
-          </section>
-        )}
-
-{imageResponse && (
-          <section className="card response-section image-section">
-            <h2>Generated Image</h2>
-            <div className="response-meta">
-              <span className="provider-badge" style={{ backgroundColor: getProviderInfo(routingRules[selectedTask]).color }}>
-                {getProviderInfo(routingRules[selectedTask]).name}
-              </span>
-            </div>
-            <div className="image-container">
-              <img src={imageResponse} alt="Generated result" />
-              <a href={imageResponse} download="generated-image.jpg" className="download-btn">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
-                </svg>
-                Download Image
-              </a>
-            </div>
-          </section>
-        )}
-        {audioResponse && (
-          <section className="card response-section audio-section">
-            <h2>Generated Audio</h2>
-            <div className="response-meta">
-              <span className="provider-badge" style={{ backgroundColor: getProviderInfo(routingRules[selectedTask]).color }}>
-                {getProviderInfo(routingRules[selectedTask]).name}
-              </span>
-            </div>
-            <div className="audio-container">
-              <audio controls src={audioResponse} className="audio-player">
-                Your browser does not support the audio element.
-              </audio>
-              <a href={audioResponse} download="generated-audio.mp3" className="download-btn">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
-                </svg>
-                Download Audio
-              </a>
-            </div>
-          </section>
-        )}
-      </main>
-
-      <footer className="footer">
-        <p>AI Multi LLM Router v1.0.0 — Powered by Groq, Cloudflare Workers AI, and HuggingFace</p>
-      </footer>
+          </div>
+        </main>
+      </div>
     </div>
   )
 }
 
 export default App
+

@@ -16,7 +16,10 @@ class GroqCoderProvider(BaseProvider):
             model=self.model,
             messages=[{"role": "user", "content": prompt}]
         )
-        return response.choices[0].message.content
+        content = response.choices[0].message.content
+        import re
+        clean_content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL | re.IGNORECASE)
+        return clean_content.strip()
 
 class GroqExplainerProvider(BaseProvider):
     def __init__(self):
@@ -31,4 +34,7 @@ class GroqExplainerProvider(BaseProvider):
             model=self.model,
             messages=[{"role": "user", "content": prompt}]
         )
-        return response.choices[0].message.content
+        content = response.choices[0].message.content
+        import re
+        clean_content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL | re.IGNORECASE)
+        return clean_content.strip()
