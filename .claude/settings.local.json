@@ -6,7 +6,9 @@
       "Bash(ai-router-env/Scripts/python -c ':*)",
       "Bash(ai-router-env/Scripts/pip install:*)",
       "Bash(python -m py_compile router.py registry.py providers/*.py)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(npm create:*)",
+      "Bash(npm install:*)"
     ]
   }
 }

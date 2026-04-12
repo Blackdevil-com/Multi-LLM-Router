@@ -13,6 +13,7 @@ ROUTING_RULES = {
     "draw":           "cf_image",
     "transcribe":     "cf_whisper",  # whisper-large-v3
     "speech":         "cf_whisper",
+    "text_to_speech": "cf_tts",
 
     # Hugging Face — Vision (free serverless)
     "segment":   "hf_sam2",

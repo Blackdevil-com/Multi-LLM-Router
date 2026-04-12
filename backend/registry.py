@@ -3,6 +3,7 @@ from providers.groq_coder import GroqCoderProvider, GroqExplainerProvider
 from providers.cloudflare_image import CloudflareImageProvider, CloudflareWhisperProvider
 from providers.hf_provider import HuggingFaceProvider
 from providers.groq_math import GroqMathProvider
+from providers.CloudflareTTSProvider import CloudflareTTSProvider
 
 # Provider registry with lazy loading
 _PROVIDER_REGISTRY = {
@@ -13,6 +14,7 @@ _PROVIDER_REGISTRY = {
     "cf_whisper": CloudflareWhisperProvider,
     "hf_sam2": lambda: HuggingFaceProvider("facebook/sam2-hiera-large"),
     "hf_phi4": lambda: HuggingFaceProvider("microsoft/phi-4"),
+    "cf_tts": CloudflareTTSProvider,
 }
 
 # Cache for instantiated providers

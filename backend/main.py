@@ -61,7 +61,7 @@ async def list_providers():
 async def generate(request: QueryRequest):
     provider_key = None
     for task, provider in ROUTING_RULES.items():
-        if task.lower() in request.task_type.lower():
+        if task.lower() == request.task_type.lower():
             provider_key = provider
             break
 
@@ -80,6 +80,10 @@ async def generate(request: QueryRequest):
         if provider_key == "cf_image":
             image_bytes = base64.b64decode(response)
             return Response(content=image_bytes, media_type="image/jpeg")
+        
+        # TTS output
+        if provider_key == "cf_tts":
+            return Response(content=response, media_type="audio/wav")
 
         return {
             "provider": provider_key,
