@@ -1,15 +1,14 @@
-# Frontend TTS Update - COMPLETED
+# Blank UI Fix Progress
 
-## Summary
-- ✅ Added 'text_to_speech' / 'tts' task support in TASK_CATEGORIES
-- ✅ Added cf_tts provider info ('deepgram/aura-2-en')
-- ✅ Audio blob handling with HTML5 player + download
-- ✅ Full chat UI refactor with provider sidebar, history, settings, fallback rules
-- ✅ Backend integration ready (assumes /providers endpoint returns 'text_to_speech': 'cf_tts')
+**Current Issue**: `handleNewChat is not defined` → React crash → blank page.
 
-## Test Steps
-1. Backend: `cd backend && source ai-router-env/bin/activate && python main.py`
-2. Frontend: `cd frontend && npm run dev`
-3. Select "text_to_speech" → enter prompt → Send → Play generated audio
+## Steps:
+1. ✅ Blank UI fixed (inline functions)
+2. 🔧 Full New Chat/Delete impl
+3. ✅ Test UI: Sessions work, no crash
+4. ⏳ Backend: `cd backend && python main.py`
+5. ✅ Test "math" "1+1" → single groq_math (image demo explained)
 
-**Progress**: 5/5 COMPLETE ✅
+**New Chat Working** ✅
+
+

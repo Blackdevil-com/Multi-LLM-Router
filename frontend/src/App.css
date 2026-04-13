@@ -116,23 +116,26 @@ body {
   gap: 0.75rem;
 }
 
+.providers-container {
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.providers-note {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: 0.5rem;
+  font-style: italic;
+}
+
 .provider-item {
   display: flex;
   align-items: center;
   gap: 0.75rem;
   padding: 0.75rem;
   border-radius: var(--radius-md);
-  cursor: pointer;
   transition: background 0.2s;
-}
-
-.provider-item:hover {
-  background: var(--bg-secondary);
-}
-
-.provider-item.active {
-  background: rgba(139, 92, 246, 0.2);
-  border: 1px solid var(--accent);
 }
 
 .provider-dot {
@@ -216,6 +219,77 @@ body {
   color: var(--text-muted);
   margin-top: 0.5rem;
   text-align: center;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 200px;
+  overflow-y: auto;
+  margin-bottom: 1rem;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background 0.2s;
+  border: 1px solid var(--border-color);
+}
+
+.history-item:hover {
+  background: var(--bg-secondary);
+}
+
+.history-item.active {
+  background: rgba(139, 92, 246, 0.2);
+  border-color: var(--accent);
+}
+
+.history-title {
+  flex: 1;
+  font-size: 0.85rem;
+}
+
+.delete-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s;
+}
+
+.delete-btn:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.2);
+}
+
+.new-chat-btn {
+  width: 100%;
+  padding: 0.75rem;
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius-md);
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 1rem;
+}
+
+.new-chat-btn:hover {
+  background: var(--accent-hover);
 }
 
 .sidebar-actions {

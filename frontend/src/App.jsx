@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 import './App.css'
+import { loadChatSessions, saveChatSessions, generateSessionTitle, createNewSession } from './chatSessions.js'
 
 const API_BASE = '/api'
 
@@ -37,6 +38,8 @@ function App() {
     "segment": "hf_sam2",
     "describe": "hf_phi4"
   }
+  const [chatSessions, setChatSessions] = useState(loadChatSessions())
+  const [activeSessionId, setActiveSessionId] = useState(null)
   const [messages, setMessages] = useState([])
   const [currentTask, setCurrentTask] = useState('')
   const [prompt, setPrompt] = useState('')
@@ -54,7 +57,42 @@ function App() {
   useEffect(() => {
     fetchProviders()
     loadApiKeys()
+    const savedTask = localStorage.getItem('ai-router-current-task')
+    if (savedTask) setCurrentTask(savedTask)
+    const initialSessions = loadChatSessions()
+    if (initialSessions.length > 0) {
+      setActiveSessionId(initialSessions[0].id)
+      setMessages(initialSessions[0].messages || [])
+    }
   }, [])
+
+  useEffect(() => {
+    localStorage.setItem('ai-router-current-task', currentTask)
+  }, [currentTask])
+
+  useEffect(() => {
+    if (activeSessionId) {
+      const session = chatSessions.find(s => s.id === activeSessionId)
+      if (session) {
+        setMessages(session.messages || [])
+        setCurrentTask(session.task || '')
+      }
+    }
+  }, [activeSessionId])
+
+  useEffect(() => {
+    if (activeSessionId) {
+      setChatSessions(prev => {
+        const updated = prev.map(s => 
+          s.id === activeSessionId 
+            ? { ...s, messages, task: currentTask, updated: new Date().toISOString() }
+            : s
+        )
+        saveChatSessions(updated)
+        return updated
+      })
+    }
+  }, [messages, currentTask, activeSessionId])
 
   useEffect(() => {
     scrollToBottom()
@@ -68,22 +106,19 @@ function App() {
     } catch (err) {
       console.error('Failed to fetch providers:', err)
       setBackendStatus('disconnected')
-      // Use fallback
       setRoutingRules(fallbackRules)
     }
   }
 
   const loadApiKeys = () => {
-    const saved = localStorage.getItem('ai-router-keys')
-    if (saved) {
-      setApiKeys(JSON.parse(saved))
+    try {
+      const saved = localStorage.getItem('ai-router-keys')
+      if (saved) {
+        setApiKeys(JSON.parse(saved))
+      }
+    } catch (e) {
+      console.error('Invalid API keys', e)
     }
-  }
-
-  const saveApiKeys = (keys) => {
-    localStorage.setItem('ai-router-keys', JSON.parse(keys))
-    setApiKeys(keys)
-    alert('Keys saved to localStorage. Copy to backend .env!')
   }
 
   const scrollToBottom = () => {
@@ -121,7 +156,6 @@ function App() {
     } finally {
       setLoading(false)
       setPrompt('')
-      setCurrentTask('')
       inputRef.current?.focus()
     }
   }
@@ -132,11 +166,39 @@ function App() {
     return `Previous conversation:\n${history}\n\nNew query: ${input}`
   }
 
-  const allTasks = Object.keys(routingRules)
-
   const getProviderInfo = (providerKey) => PROVIDER_INFO[providerKey] || { name: providerKey, model: 'Unknown', color: '#6b7280' }
 
-  const clearChat = () => setMessages([])
+  const clearChat = () => {
+    setMessages([])
+  }
+
+  const handleNewChat = () => {
+    const newSession = createNewSession(currentTask)
+    setChatSessions(prev => {
+      const updatedCurrent = prev.map(s => 
+        s.id === activeSessionId ? { ...s, messages, task: currentTask, updated: new Date().toISOString() } : s
+      )
+      return [...updatedCurrent, newSession]
+    })
+    setActiveSessionId(newSession.id)
+    setMessages([])
+    setPrompt('')
+  }
+
+  const deleteSession = (id) => {
+    setChatSessions(prev => {
+      const updated = prev.filter(s => s.id !== id)
+      saveChatSessions(updated)
+      return updated
+    })
+    if (activeSessionId === id) {
+      setMessages([])
+      setCurrentTask('')
+      if (updated.length > 0) {
+        setActiveSessionId(updated[0].id)
+      }
+    }
+  }
 
   const exportChat = () => {
     const chatText = messages.map(m => `${m.role.toUpperCase()}: ${typeof m.content === 'object' ? '[media]' : m.content.text || m.content}`).join('\n\n')
@@ -165,24 +227,27 @@ function App() {
       <div className="main-container">
         <aside className="sidebar">
           <div className="sidebar-section">
-            <h3>Providers</h3>
-            <div className="providers-list">
-              {backendStatus === 'disconnected' && (
-                <div className="backend-status">
-                  <p>⚠️ Backend offline</p>
-                  <p>Run: <code>cd backend && python main.py</code></p>
-                </div>
-              )}
-              {Object.entries(routingRules).map(([task, provider]) => {
-                const info = getProviderInfo(provider)
-                return (
-                  <div key={task} className="provider-item" onClick={() => setCurrentTask(task)}>
-                    <span className="provider-dot" style={{backgroundColor: info.color}} />
-                    <span>{info.name} <small>{task}</small></span>
+            <h3>Available Providers</h3>
+            <div className="providers-container">
+              <div className="providers-list">
+                {backendStatus === 'disconnected' && (
+                  <div className="backend-status">
+                    <p>⚠️ Backend offline</p>
+                    <p>Run: <code>cd backend &amp;&amp; python main.py</code></p>
                   </div>
-                )
-              })}
+                )}
+                {Object.entries(routingRules).map(([task, provider]) => {
+                  const info = getProviderInfo(provider)
+                  return (
+                    <div key={task} className="provider-item">
+                      <span className="provider-dot" style={{backgroundColor: info.color}} />
+                      <span>{info.name} <small>{task}</small></span>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
+            <p className="providers-note">Select task from dropdown</p>
           </div>
 
           <div className="sidebar-section">
@@ -203,7 +268,10 @@ function App() {
                     />
                   </div>
                 ))}
-                <button className="save-keys-btn" onClick={() => saveApiKeys(apiKeys)}>
+                <button className="save-keys-btn" onClick={() => {
+                  localStorage.setItem('ai-router-keys', JSON.stringify(apiKeys))
+                  alert('Keys saved! Copy to backend .env')
+                }}>
                   Save Keys
                 </button>
                 <p className="note">Copy saved keys to backend .env file.</p>
@@ -211,9 +279,34 @@ function App() {
             )}
           </div>
 
+          <div className="sidebar-section">
+            <h3>History</h3>
+            <div className="history-list">
+              {chatSessions.map(session => (
+                <div key={session.id} className={`history-item ${activeSessionId === session.id ? 'active' : ''}`} onClick={() => setActiveSessionId(session.id)}>
+                  <span>{session.title || 'Untitled'}</span>
+                  <button className="delete-btn" onClick={(e) => {
+                    e.stopPropagation()
+                    if (confirm('Delete session?')) {
+                      setChatSessions(prev => {
+                        const updated = prev.filter(s => s.id !== session.id)
+                        saveChatSessions(updated)
+                        return updated
+                      })
+                      if (activeSessionId === session.id) {
+                        setMessages([])
+                        setCurrentTask('')
+                      }
+                    }
+                  }}>×</button>
+                </div>
+              ))}
+            </div>
+            <button className="new-chat-btn" onClick={handleNewChat}>+ New Chat</button>
+          </div>
           <div className="sidebar-actions">
-            <button className="clear-btn" onClick={clearChat}>Clear Chat</button>
-            <button className="export-btn" onClick={exportChat}>Export Chat</button>
+            <button className="clear-btn" onClick={clearChat}>Clear Current</button>
+            <button className="export-btn" onClick={exportChat}>Export</button>
           </div>
         </aside>
 
@@ -222,7 +315,7 @@ function App() {
             {messages.length === 0 ? (
               <div className="welcome-message">
                 <h2>Welcome to AI Router Chat!</h2>
-                <p>Select a provider from sidebar, choose task type, and start chatting.</p>
+                <p>Select a task from dropdown, type message, Send → AI response!</p>
               </div>
             ) : (
               messages.map((message, index) => (
@@ -239,16 +332,10 @@ function App() {
                       </div>
                     ) : message.content.type === 'image' ? (
                       <div className="ai-media">
-                        <div className="provider-tag" style={{backgroundColor: getProviderInfo(routingRules[currentTask]).color}}>
-                          {getProviderInfo(routingRules[currentTask]).name}
-                        </div>
                         <img src={message.content.url} alt="Generated" />
                       </div>
                     ) : message.content.type === 'audio' ? (
                       <div className="ai-media">
-                        <div className="provider-tag" style={{backgroundColor: getProviderInfo(routingRules[currentTask]).color}}>
-                          {getProviderInfo(routingRules[currentTask]).name}
-                        </div>
                         <audio controls src={message.content.url} />
                       </div>
                     ) : (
@@ -280,7 +367,7 @@ function App() {
             >
               <option value="">Select Task</option>
               {Object.keys(routingRules || fallbackRules).map(task => (
-                <option key={task} value={task}>{task} ({getProviderInfo(routingRules[task] || fallbackRules[task]).name})</option>
+                <option key={task} value={task}>{task}</option>
               ))}
             </select>
             <input
@@ -289,7 +376,7 @@ function App() {
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && !loading && handleSend()}
-              placeholder="Type your message... (Ctrl+Enter to send)"
+              placeholder="Type your message... (Enter to send)"
               className="prompt-input"
               disabled={loading}
             />
