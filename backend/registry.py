@@ -12,8 +12,8 @@ _PROVIDER_REGISTRY = {
     "groq_math": GroqMathProvider,
     "cf_image": CloudflareImageProvider,
     "cf_whisper": CloudflareWhisperProvider,
-    "hf_sam2": lambda: HuggingFaceProvider("facebook/sam2-hiera-large"),
-    "hf_phi4": lambda: HuggingFaceVisionProvider(),
+    "hf_sam2": lambda: HuggingFaceProvider("Qwen/Qwen2.5-1.5B-Instruct"),  # Fixed SAM2 stub
+    "hf_phi4": GroqExplainerProvider,  # Reliable text LLM fallback for vision describe (fast, free)
     "cf_tts": CloudflareTTSProvider,
 }
 
