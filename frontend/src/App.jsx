@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 import './App.css'
+import ReactMarkdown from 'react-markdown';
 import { loadChatSessions, saveChatSessions, generateSessionTitle, createNewSession, renameSession } from './chatSessions.js'
 
 const API_BASE = '/api'
@@ -379,11 +380,36 @@ function App() {
                     {message.role === 'user' ? (
                       <div className="user-content">{message.content}</div>
                     ) : message.content.type === 'text' ? (
-                      <div className="ai-text">
+<div className="ai-text">
                         <div className="provider-tag" style={{backgroundColor: getProviderInfo(message.content.provider).color}}>
                           {getProviderInfo(message.content.provider).name}
                         </div>
-                        <p>{message.content.text}</p>
+                        <ReactMarkdown 
+                          components={{
+                            pre: ({node, ...props}) => (
+                              <pre {...props} style={{position: 'relative'}}>
+                                <code className="code-content" style={{userSelect: 'text', display: 'block'}}>{props.children}</code>
+                                <button 
+                                  className="copy-button" 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const code = e.currentTarget.parentElement.querySelector('.code-content');
+                                    navigator.clipboard.writeText(code.textContent.trim());
+                                    e.target.textContent = 'Copied!';
+                                    e.target.style.background = '#60a5fa';
+                                    setTimeout(() => {
+                                      e.target.textContent = 'Copy';
+                                      e.target.style.background = '#3b82f6';
+                                    }, 1000);
+                                  }}
+                                  style={{position: 'absolute', top: '0.5rem', right: '0.5rem'}}
+                                >Copy</button>
+                              </pre>
+                            )
+                          }}
+                        >
+                          {message.content.text}
+                        </ReactMarkdown>
                       </div>
                     ) : message.content.type === 'image' ? (
                       <div className="ai-media">
@@ -425,15 +451,24 @@ function App() {
                 <option key={task} value={task}>{task}</option>
               ))}
             </select>
-            <input
+            <textarea
               ref={inputRef}
-              type="text"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && !loading && handleSend()}
-              placeholder="Type your message... (Enter to send)"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey && !loading) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              placeholder="Type your message... (Shift+Enter for new line)"
               className="prompt-input"
               disabled={loading}
+              rows={1}
+              onInput={(e) => {
+                e.target.style.height = 'auto';
+                e.target.style.height = e.target.scrollHeight + 'px';
+              }}
             />
             <button onClick={handleSend} disabled={loading || !prompt.trim() || !currentTask} className="send-btn">
               {loading ? '...' : 'Send'}
