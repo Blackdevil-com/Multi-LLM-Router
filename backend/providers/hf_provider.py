@@ -11,9 +11,23 @@ class HuggingFaceProvider(BaseProvider):
         )
         self.model = model
 
-    async def generate(self, prompt: str) -> str:
+    async def generate(self, prompt: str, image_b64: str = None) -> str:
+        if image_b64:
+            # Resize/resize for HF limits - take first 1MB
+            import base64
+            b64_bytes = image_b64.encode('utf-8')
+            if len(b64_bytes) > 1_000_000:  # ~1MB
+                image_b64 = image_b64[:1_000_000]
+            
+            messages = [{"role": "user", "content": [
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}},
+                {"type": "text", "text": prompt}
+            ]}]
+        else:
+            messages = [{"role": "user", "content": prompt}]
+            
         response = await self.client.chat_completion(
-            messages=[{"role": "user", "content": prompt}],
+            messages=messages,
             max_tokens=1024
         )
         return response.choices[0].message.content

@@ -1,10 +1,7 @@
-# Task: Redesign task-select UI
+# Task: Format all providers files to correct multi-line structure
 
 ## Steps:
-- [x] Understand files (App.jsx, App.css confirmed)
-- [x] Create & confirm edit plan  
-- [x] Step 1: Update App.css with enhanced .task-select styling
-- [x] Step 2: Test in browser  
-- [x] Step 4: Revise to mid-grey rounded per feedback
-- [x] Step 3: Complete task
-
+- [x] Step 1: Format backend/providers/hf_vision.py
+- [x] Step 2: Format backend/providers/groq_math.py
+- [x] Step 3: Format backend/providers/groq_coder.py
+- [x] Step 4: Verify formatting and complete task

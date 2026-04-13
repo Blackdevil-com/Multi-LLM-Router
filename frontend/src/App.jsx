@@ -55,9 +55,12 @@ function App() {
   const [providersExpanded, setProvidersExpanded] = useState(true)
   const [renamingSessionId, setRenamingSessionId] = useState(null)
   const [newSessionTitle, setNewSessionTitle] = useState('')
+  const [selectedImage, setSelectedImage] = useState(null)
+  const [imagePreview, setImagePreview] = useState(null)
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
   const renameInputRef = useRef(null)
+  const fileInputRef = useRef(null)
 
   useEffect(() => {
     fetchProviders()
@@ -130,27 +133,58 @@ function App() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
-  const handleSend = async () => {
-    if (!prompt.trim() || !currentTask) return
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0]
+    if (file && file.type.startsWith('image/') && file.size < 5 * 1024 * 1024) {  // <5MB
+      setSelectedImage(file)
+      const preview = URL.createObjectURL(file)
+      setImagePreview(preview)
+    } else if (file && file.size >= 5 * 1024 * 1024) {
+      alert('Image too large (max 5MB)')
+    }
+  }
 
-    const userMessage = { role: 'user', content: prompt, task_type: currentTask, timestamp: new Date() }
+  const removeImage = () => {
+    setSelectedImage(null)
+    setImagePreview(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const handleSend = async () => {
+    if (!prompt.trim() && !selectedImage) return
+    if (!currentTask) return
+
+    const userMessage = { 
+      role: 'user', 
+      content: prompt || '[Image only]', 
+      task_type: currentTask, 
+      image: selectedImage,
+      timestamp: new Date() 
+    }
     setMessages(prev => [...prev, userMessage])
     setLoading(true)
     const currentPrompt = prompt
 
     try {
+      const formData = new FormData()
+      formData.append('task_type', currentTask)
+      formData.append('prompt', buildPromptWithHistory(currentPrompt))
+      if (selectedImage) {
+        formData.append('image', selectedImage)
+      }
+
       let responseType = (currentTask === 'text_to_speech' || currentTask.includes('image') || currentTask === 'draw') ? 'blob' : 'json'
-      const res = await axios.post(`${API_BASE}/generate`, {
-        task_type: currentTask,
-        prompt: buildPromptWithHistory(currentPrompt)
-      }, { responseType })
+      const res = await axios.post(`${API_BASE}/generate`, formData, { 
+        headers: { 'Content-Type': 'multipart/form-data' },
+        responseType 
+      })
 
       let aiContent
       if (responseType === 'blob') {
         const url = URL.createObjectURL(res.data)
         aiContent = { type: currentTask === 'text_to_speech' ? 'audio' : 'image', url, provider: routingRules[currentTask] }
       } else {
-        aiContent = { type: 'text', text: res.data.response, provider: res.data.provider }
+        aiContent = { type: 'text', text: res.data.response || res.data, provider: res.data.provider || routingRules[currentTask] }
       }
 
       const aiMessage = { role: 'ai', content: aiContent, timestamp: new Date() }
@@ -161,6 +195,8 @@ function App() {
     } finally {
       setLoading(false)
       setPrompt('')
+      setSelectedImage(null)
+      setImagePreview(null)
       inputRef.current?.focus()
     }
   }
@@ -440,7 +476,7 @@ function App() {
             <div ref={messagesEndRef} />
           </div>
 
-          <div className="input-bar">
+            <div className="input-bar">
             <select 
               value={currentTask} 
               onChange={(e) => setCurrentTask(e.target.value)}
@@ -451,26 +487,45 @@ function App() {
                 <option key={task} value={task}>{task}</option>
               ))}
             </select>
-            <textarea
-              ref={inputRef}
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey && !loading) {
-                  e.preventDefault();
-                  handleSend();
-                }
-              }}
-              placeholder="Type your message... (Shift+Enter for new line)"
-              className="prompt-input"
-              disabled={loading}
-              rows={1}
-              onInput={(e) => {
-                e.target.style.height = 'auto';
-                e.target.style.height = e.target.scrollHeight + 'px';
-              }}
-            />
-            <button onClick={handleSend} disabled={loading || !prompt.trim() || !currentTask} className="send-btn">
+            <div className="prompt-container">
+              <textarea
+                ref={inputRef}
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey && !loading) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                placeholder="Type your message... (Shift+Enter for new line)"
+                className="prompt-input"
+                disabled={loading}
+                rows={1}
+                onInput={(e) => {
+                  e.target.style.height = 'auto';
+                  e.target.style.height = e.target.scrollHeight + 'px';
+                }}
+              />
+              {imagePreview && (
+                <div className="image-preview">
+                  <img src={imagePreview} alt="Preview" />
+                  <button onClick={removeImage} className="remove-image-btn">×</button>
+                </div>
+              )}
+            </div>
+            <label className="file-upload-btn" htmlFor="image-upload">
+              📷
+              <input 
+                id="image-upload"
+                type="file" 
+                ref={fileInputRef}
+                accept="image/*"
+                onChange={handleImageUpload}
+                style={{display: 'none'}}
+              />
+            </label>
+            <button onClick={handleSend} disabled={loading || (!prompt.trim() && !selectedImage) || !currentTask} className="send-btn">
               {loading ? '...' : 'Send'}
             </button>
           </div>

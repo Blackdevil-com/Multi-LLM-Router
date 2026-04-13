@@ -1,7 +1,7 @@
-# registry.py
 from providers.groq_coder import GroqCoderProvider, GroqExplainerProvider
 from providers.cloudflare_image import CloudflareImageProvider, CloudflareWhisperProvider
 from providers.hf_provider import HuggingFaceProvider
+from providers.hf_vision import HuggingFaceVisionProvider
 from providers.groq_math import GroqMathProvider
 from providers.CloudflareTTSProvider import CloudflareTTSProvider
 
@@ -13,7 +13,7 @@ _PROVIDER_REGISTRY = {
     "cf_image": CloudflareImageProvider,
     "cf_whisper": CloudflareWhisperProvider,
     "hf_sam2": lambda: HuggingFaceProvider("facebook/sam2-hiera-large"),
-    "hf_phi4": lambda: HuggingFaceProvider("microsoft/phi-4"),
+    "hf_phi4": lambda: HuggingFaceVisionProvider(),
     "cf_tts": CloudflareTTSProvider,
 }
 
