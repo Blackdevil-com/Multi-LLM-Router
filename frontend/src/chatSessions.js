@@ -41,3 +41,11 @@ export const createNewSession = (currentTask = '') => ({
   messages: [],
   created: new Date().toISOString()
 });
+
+export const renameSession = (sessions, sessionId, newTitle) => {
+  const updated = sessions.map(session =>
+    session.id === sessionId ? { ...session, title: newTitle.trim() || generateSessionTitle(session.messages, session.task) } : session
+  );
+  saveChatSessions(updated);
+  return updated;
+};

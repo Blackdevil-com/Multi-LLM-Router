@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 import './App.css'
-import { loadChatSessions, saveChatSessions, generateSessionTitle, createNewSession } from './chatSessions.js'
+import { loadChatSessions, saveChatSessions, generateSessionTitle, createNewSession, renameSession } from './chatSessions.js'
 
 const API_BASE = '/api'
 
@@ -15,14 +15,14 @@ const TASK_CATEGORIES = {
 }
 
 const PROVIDER_INFO = {
-  cf_tts: { name: 'Cloudflare TTS', model: 'deepgram/aura-2-en', color: '#ec4899' },
-  groq_coder: { name: 'Groq Coder', model: 'Qwen3-32B', color: '#10b981' },
-  groq_explainer: { name: 'Groq Explainer', model: 'Llama-3.3-70B', color: '#3b82f6' },
-  groq_math: { name: 'Groq Math', model: 'GPT-oss-120B', color: '#f59e0b' },
-  cf_image: { name: 'Cloudflare Image', model: 'Flux-1 Schnell', color: '#8b5cf6' },
-  cf_whisper: { name: 'Cloudflare Whisper', model: 'Whisper Large v3', color: '#ec4899' },
-  hf_sam2: { name: 'HuggingFace SAM2', model: 'facebook/sam2-hiera-large', color: '#06b6d4' },
-  hf_phi4: { name: 'HuggingFace Phi-4', model: 'microsoft/phi-4', color: '#84cc16' }
+cf_tts: { name: 'Cloudflare TTS', model: 'deepgram/aura-2-en', color: '#456882' },
+groq_coder: { name: 'Groq Coder', model: 'Qwen3-32B', color: '#234C6A' },
+  groq_explainer: { name: 'Groq Explainer', model: 'Llama-3.3-70B', color: '#1B3C53' },
+  groq_math: { name: 'Groq Math', model: 'GPT-oss-120B', color: '#456882' },
+  cf_image: { name: 'Cloudflare Image', model: 'Flux-1 Schnell', color: '#234C6A' },
+  cf_whisper: { name: 'Cloudflare Whisper', model: 'Whisper Large v3', color: '#456882' },
+  hf_sam2: { name: 'HuggingFace SAM2', model: 'facebook/sam2-hiera-large', color: '#1B3C53' },
+  hf_phi4: { name: 'HuggingFace Phi-4', model: 'microsoft/phi-4', color: '#234C6A' }
 }
 
 function App() {
@@ -51,8 +51,12 @@ function App() {
     CF_API_TOKEN: '',
     HF_TOKEN: ''
   })
+  const [providersExpanded, setProvidersExpanded] = useState(true)
+  const [renamingSessionId, setRenamingSessionId] = useState(null)
+  const [newSessionTitle, setNewSessionTitle] = useState('')
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
+  const renameInputRef = useRef(null)
 
   useEffect(() => {
     fetchProviders()
@@ -221,15 +225,17 @@ function App() {
           </svg>
           <h1>AI Router Chat</h1>
         </div>
-        <p className="subtitle">Real-time chat with intelligent provider routing</p>
       </header>
 
       <div className="main-container">
         <aside className="sidebar">
           <div className="sidebar-section">
-            <h3>Available Providers</h3>
+            <div className="sidebar-toggle-header" onClick={() => setProvidersExpanded(!providersExpanded)}>
+              <h3>Providers ({Object.keys(routingRules).length})</h3>
+              <span>{providersExpanded ? '▼' : '▶'}</span>
+            </div>
             <div className="providers-container">
-              <div className="providers-list">
+              <div className={`providers-list ${providersExpanded ? 'expanded' : 'collapsed'}`}>
                 {backendStatus === 'disconnected' && (
                   <div className="backend-status">
                     <p>⚠️ Backend offline</p>
@@ -247,7 +253,7 @@ function App() {
                 })}
               </div>
             </div>
-            <p className="providers-note">Select task from dropdown</p>
+            <p className="providers-note">Click to toggle providers</p>
           </div>
 
           <div className="sidebar-section">
@@ -282,25 +288,74 @@ function App() {
           <div className="sidebar-section">
             <h3>History</h3>
             <div className="history-list">
-              {chatSessions.map(session => (
-                <div key={session.id} className={`history-item ${activeSessionId === session.id ? 'active' : ''}`} onClick={() => setActiveSessionId(session.id)}>
-                  <span>{session.title || 'Untitled'}</span>
-                  <button className="delete-btn" onClick={(e) => {
-                    e.stopPropagation()
-                    if (confirm('Delete session?')) {
-                      setChatSessions(prev => {
-                        const updated = prev.filter(s => s.id !== session.id)
-                        saveChatSessions(updated)
-                        return updated
-                      })
-                      if (activeSessionId === session.id) {
-                        setMessages([])
-                        setCurrentTask('')
+              {chatSessions.map(session => {
+                const isActive = activeSessionId === session.id
+                const isRenaming = renamingSessionId === session.id
+                return (
+                  <div key={session.id} className={`history-item ${isActive ? 'active' : ''} ${isRenaming ? 'editing' : ''}`} onClick={() => setActiveSessionId(session.id)}>
+                    {isRenaming ? (
+                      <input
+                        ref={renameInputRef}
+                        className="rename-input"
+                        value={newSessionTitle}
+                        onChange={(e) => setNewSessionTitle(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            setChatSessions(renameSession(chatSessions, session.id, newSessionTitle))
+                            setRenamingSessionId(null)
+                            setNewSessionTitle('')
+                          }
+                          if (e.key === 'Escape') {
+                            setRenamingSessionId(null)
+                            setNewSessionTitle('')
+                          }
+                        }}
+                        onBlur={() => {
+                          setChatSessions(renameSession(chatSessions, session.id, newSessionTitle))
+                          setRenamingSessionId(null)
+                          setNewSessionTitle('')
+                        }}
+                        autoFocus
+                      />
+                    ) : (
+                      <>
+                        <span className="history-title">{session.title || 'Untitled'}</span>
+                        {isActive && (
+                          <button 
+                            className="rename-icon"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setRenamingSessionId(session.id)
+                              setNewSessionTitle(session.title || '')
+                            }}
+                            title="Rename chat"
+                          >
+                            ✏️
+                          </button>
+                        )}
+                      </>
+                    )}
+                    <button className="delete-btn" onClick={(e) => {
+                      e.stopPropagation()
+                      if (confirm('Delete session?')) {
+                        setChatSessions(prev => {
+                          const updated = prev.filter(s => s.id !== session.id)
+                          saveChatSessions(updated)
+                          return updated
+                        })
+                        if (activeSessionId === session.id) {
+                          setMessages([])
+                          setCurrentTask('')
+                        }
+                        if (renamingSessionId === session.id) {
+                          setRenamingSessionId(null)
+                          setNewSessionTitle('')
+                        }
                       }
-                    }
-                  }}>×</button>
-                </div>
-              ))}
+                    }}>×</button>
+                  </div>
+                )
+              })}
             </div>
             <button className="new-chat-btn" onClick={handleNewChat}>+ New Chat</button>
           </div>
